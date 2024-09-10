@@ -1,0 +1,16 @@
+# Add
+smart_food_containers:
+
+sensor:
+  - platform: smart_food_containers
+
+browser_mod:
+
+input_text:
+  new_container_name:
+    name: New Container Name
+
+input_button:
+  add_container:
+    name: Add Container
+    icon: mdi:plus

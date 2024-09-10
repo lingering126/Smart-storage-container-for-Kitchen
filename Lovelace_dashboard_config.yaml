@@ -1,0 +1,112 @@
+views:
+  - title: Smart Food Containers Overview
+    path: overview
+    icon: mdi:fridge-outline
+    cards:
+      - type: custom:auto-entities
+        card:
+          type: grid
+          columns: 3
+          square: false
+        filter:
+          include:
+            - domain: input_text
+              name: "*Container*"
+        card:
+          type: custom:mushroom-template-card
+          primary: "{{ state_attr(entity, 'friendly_name') }}"
+          secondary: >
+            Weight: {{ states('sensor.' + entity.entity_id.split('.')[1] + '_weight') }} g
+            Temp: {{ states('sensor.' + entity.entity_id.split('.')[1] + '_temperature') }}°C
+          icon: mdi:food-apple
+          tap_action:
+            action: navigate
+            navigation_path: "/lovelace/container-{{ entity.entity_id.split('.')[1] }}"
+
+      - type: entities
+        title: Add New Container
+        entities:
+          - entity: input_text.new_container_name
+            name: New Container Name
+          - entity: input_button.add_container
+            name: Add Container
+
+  - title: Container Details
+    path: container-details
+    icon: mdi:fridge
+    cards:
+      - type: custom:auto-entities
+        card:
+          type: custom:mushroom-template-card
+          primary: "{{ state_attr(entity, 'friendly_name') }}"
+          secondary: >
+            Weight: {{ states('sensor.' + entity.entity_id.split('.')[1] + '_weight') }} g
+            Temp: {{ states('sensor.' + entity.entity_id.split('.')[1] + '_temperature') }}°C
+          icon: mdi:food-apple
+        filter:
+          include:
+            - domain: input_text
+              name: "*Container*"
+
+      - type: horizontal-stack
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Daily Consumption
+            icon: mdi:chart-line
+            tap_action:
+              action: fire-dom-event
+              browser_mod:
+                service: browser_mod.popup
+                data:
+                  content:
+                    type: custom:apexcharts-card
+                    header:
+                      show: true
+                      title: Daily Consumption
+                    graph_span: 7d
+                    span:
+                      start: day
+                    series:
+                      - entity: sensor.food_container_daily_consumption
+                        type: column
+
+          - type: custom:mushroom-template-card
+            primary: Weekly Consumption
+            icon: mdi:chart-bar
+            tap_action:
+              action: fire-dom-event
+              browser_mod:
+                service: browser_mod.popup
+                data:
+                  content:
+                    type: custom:apexcharts-card
+                    header:
+                      show: true
+                      title: Weekly Consumption
+                    graph_span: 28d
+                    span:
+                      start: week
+                      offset: '-1w'
+                    series:
+                      - entity: sensor.food_container_weekly_consumption
+                        type: column
+
+          - type: custom:mushroom-template-card
+            primary: Monthly Consumption
+            icon: mdi:chart-areaspline
+            tap_action:
+              action: fire-dom-event
+              browser_mod:
+                service: browser_mod.popup
+                data:
+                  content:
+                    type: custom:apexcharts-card
+                    header:
+                      show: true
+                      title: Monthly Consumption
+                    graph_span: 12mo
+                    span:
+                      start: month
+                    series:
+                      - entity: sensor.food_container_monthly_consumption
+                        type: column
