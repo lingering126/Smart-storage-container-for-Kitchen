@@ -1,16 +1,75 @@
-# Add
-smart_food_containers:
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 127.0.0.1
 
 sensor:
-  - platform: smart_food_containers
+  - platform: random
+  
+#   - platform: command_line
+#     name: shoppinglist
+#     command: >
+#           echo "{\"list\":" $( cat .shopping_list.json) "}" 
+#     value_template: > 
+#         {{ value_json.list | length }}
+#     json_attributes:
+#         - list   
 
-browser_mod:
+template:  
+    - sensor:      
+        - name: "Time Until Empty"        
+          unit_of_measurement: "Days"  
+          state: >
+            {% set w = states('sensor.sugar_weight') | float %}          
+            {% set dw = states('sensor.weight') | float %} 
+            {{ (w/(-dw))| round(1, default=0) if dw < 0 else 100  }}
+          
+sql:
+  - name: Sun state
+    query: >
+      SELECT
+        states.state
+      FROM
+        states
+        LEFT JOIN state_attributes ON (
+          states.attributes_id = state_attributes.attributes_id
+        )
+      WHERE
+        metadata_id = (
+          SELECT
+            metadata_id
+          FROM
+            states_meta
+          where
+            entity_id = 'sun.sun'
+        )
+      ORDER BY
+        state_id DESC
+      LIMIT
+        1;
+    column: "state"
+      
+      
+recorder:
+    purge_keep_days: 31
 
-input_text:
-  new_container_name:
-    name: New Container Name
 
-input_button:
-  add_container:
-    name: Add Container
-    icon: mdi:plus
+#homeassistant:
+
+#mqtt:
+#  sensor:
+#    - name: "Test1"
+#      state_topic: "mytopic/data"
+#      unit_of_measurement: "C"
