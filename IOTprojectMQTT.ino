@@ -1,9 +1,3 @@
-/*
-  SimpleMQTTClient.ino
-  The purpose of this exemple is to illustrate a simple handling of MQTT and Wifi connection.
-  Once it connects successfully to a Wifi network and a MQTT broker, it subscribe to a topic and send a message to it.
-  It will also send a message delayed 5 seconds later.
-*/
 #include <WiFi.h>
 #include "EspMQTTClient.h"
 #include <ArduinoJson.h>
@@ -11,28 +5,32 @@
 #include "HX710.h"
 #include <EEPROM.h>
 
+// create an instance of the Mqtt client fro communication
 EspMQTTClient client(
-  "AndroidAP3DF5",
-  "btkk0569",
-  "192.168.66.76",  // MQTT Broker server ip
-  "Mqtt",   // Can be omitted if not needed
-  "mqtt1",   // Can be omitted if not needed
+  "SSID",
+  "Password",
+  "192.168.178.76",  // MQTT Broker server ip
+  "Mqtt",   // Can be omitted if not needed Username for the home assistant user used for connection
+  "mqtt1",   // Can be omitted if not needed Password for the home assistant user used for connection 
   "TestClient",     // Client name that uniquely identify your device
   1883              // The MQTT port, default to 1883. this line can be omitted
 );
 int timelapsed;
 
+//Name of the ingredient 
 String name= "Sugar";
-
+// Unique Id  for the container
 String id= "scaletest1";
 
+// Termperature sensor
 Adafruit_MLX90614 mlx = Adafruit_MLX90614();
-
+//Analog digital converter for load cell
 HX710 ps;
-
+// hx710 pins
 const int DOUT = 17;
 const int PD_SCK = 16;
 
+// Memory for storing Calibration data
 #define EEPROM_SIZE 7
 
 const int cal0a =0;
@@ -65,8 +63,12 @@ void setup()
 // WARNING : YOU MUST IMPLEMENT IT IF YOU USE EspMQTTClient
 void onConnectionEstablished()
 {
-  // Subscribe to "mytopic/test" and display received message to Serial
-  client.subscribe("cal/0", [](const String & payload) {
+  // on home assistant restart resend config data
+  client.subscribe("ha/start",[](const String & payload){
+    buildDiscoveryEntity();
+  });
+  // message that zero weight is on the scale so the value with zero weight can be stored
+  client.subscribe(name+"/cal/0", [](const String & payload) {
     while( !ps.isReady() );
     ps.readAndSelectNextData( HX710_DIFFERENTIAL_INPUT_40HZ );
     int a=ps.getLastDifferentialInput();
@@ -77,15 +79,12 @@ void onConnectionEstablished()
     EEPROM.write(cal0a,x);
     EEPROM.write(cal0b,y);
     EEPROM.write(cal0c,z);
-    // EEPROM.write(cal0a, a >> 8);
-    // EEPROM.write(cal0b, a & 0xFF);
-    // (byte1 << 8) + byte2
     Serial.println((EEPROM.read(cal0a)*10000)+EEPROM.read(cal0b)*100+EEPROM.read(calvalc));
     EEPROM.commit();
   });
 
-  // Subscribe to "mytopic/wildcardtest/#" and display received message to Serial
-  client.subscribe("cal/x", [](const String & topic, const String & payload) {
+  // message that specified weight x is on the scale so the value with specified weight x weight  and the value of x can be stored
+  client.subscribe(name+"/cal/x", [](const String & topic, const String & payload) {
     EEPROM.write(calx, payload.toInt());
     while( !ps.isReady() );
     ps.readAndSelectNextData( HX710_DIFFERENTIAL_INPUT_40HZ );
@@ -97,19 +96,13 @@ void onConnectionEstablished()
     EEPROM.write(calvala,x);
     EEPROM.write(calvalb,y);
     EEPROM.write(calvalc,z);
-    // EEPROM.write(calvala, b >> 8);
-    // EEPROM.write(calvalb, b & 0xFF);
     Serial.println((EEPROM.read(calvala)*10000)+EEPROM.read(calvalb)*100+EEPROM.read(calvalc));
     EEPROM.commit();
   });
-  // client.subscribe("cal/val", [](const String & topic, const String & payload) {
-  //   EEPROM.write(calval, payload.toInt());
-  //   EEPROM.commit();
-  // });
 
+  //Startup messages that demonstrate a connection
   // Publish a message to "mytopic/test"
   client.publish("mytopic/test", "This is a message"); // You can activate the retain flag by setting the third parameter to true
-  // client.publish("mytopic/data",String(mlx.readAmbientTempC()));
   buildDiscoveryEntity();
   // Execute delayed instructions
   client.executeDelayed(5 * 1000, []() {
@@ -117,6 +110,8 @@ void onConnectionEstablished()
   });
 }
 
+
+// Function for sending sensor information to the MQTT integration
 void buildDiscoveryEntity(){
   JsonDocument doc;
   doc["name"]= name+" temperature";
@@ -137,30 +132,27 @@ void buildDiscoveryEntity(){
   client.publish("homeassistant/sensor/"+id+"w/config",output);
 }
 
+//Function for calibrating weight
+//convert sensor output into  weight in grams based on a linear regression using stored values
 int calweight(){
   while( !ps.isReady() );
   ps.readAndSelectNextData( HX710_DIFFERENTIAL_INPUT_40HZ );
   float ret=ps.getLastDifferentialInput();
   ret-= ((EEPROM.read(cal0a)*10000)+EEPROM.read(cal0b)*100+EEPROM.read(calvalc));
-  // Serial.println(EEPROM.read(cal0a));
   ret=ret/((EEPROM.read(calvala)*10000)+EEPROM.read(calvalb)*100+EEPROM.read(calvalc)-((EEPROM.read(cal0a)*10000)+EEPROM.read(cal0b)*100+EEPROM.read(calvalc)));
   ret=ret*(EEPROM.read(calx));
   return ret;
 
 }
 
+//Send Mqtt data every 10 seconds
 void loop()
 {
   client.loop();
-  // client.publish("mytopic/data","12");
   if(millis()-timelapsed>10000){
     Serial.print("Ambient = "); Serial.print(mlx.readAmbientTempC());
     client.publish(name+"/temp",String(mlx.readAmbientTempC()));
-    // while( !ps.isReady() );
-    // ps.readAndSelectNextData( HX710_DIFFERENTIAL_INPUT_40HZ );
-    // int v2 = ps.getLastOtherInput();
     client.publish(name+"/w",String(calweight()));
-    // client.publish("mytopic/data/tete","String(mlx.readAmbientTempC())");
     timelapsed=millis();
   }
 }
